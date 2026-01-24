@@ -1,5 +1,6 @@
 #define DEBUG
 #define DEVELOP
+//#define PRODUCTION
 
 #include <FastLED.h>
 #include "defines.h"
@@ -13,22 +14,36 @@ uint8_t everyXmsCounter, every1msCounter, every10msCounter, every100msCounter, e
 
 
 //Seria config
-#define SERIAL_BUF_LEN 64
-char rxBuf[SERIAL_BUF_LEN];
+#define SERIAL_BUF_LEN 255
+char rxBuffer[SERIAL_BUF_LEN];
 uint8_t rxPos = 0;
 
 //buffer 
 #define CMD_QUEUE_SIZE 20
 Command cmdQueue[CMD_QUEUE_SIZE];
-uint8_t cmdCount = 0;
-uint8_t cmdIndex = 0;
+uint8_t commandsCount = 0;  //number of commands in the Queue
+uint8_t commandsIndex = 0;  //Index of the command executed
 
 //Custom zones
 LedRange customZones[10];
 bool customZoneDefined[10];
 
+bool runQueue = false;
+bool skipTimer = false;
+bool waitForTimer = false;
+uint16_t waitSecondsCounter = 0;  //WIT
 
-
+struct BlinkState {
+  uint16_t first;
+  uint16_t last;
+  uint16_t msOn;
+  uint16_t msOff;
+  bool stateOn;
+  bool stateOff;
+  bool active;
+};
+volatile BlinkState blink;
+CRGB blkBackup[NUM_LEDS];   // snapshot colori
 
 void setup() {
 
@@ -45,29 +60,33 @@ void setup() {
 
   pinMode(LED_BUILTIN,      OUTPUT);
   pinMode(PIN_WHITE_LIGHT,  OUTPUT); 
+  pinMode(PIN_STRIP_LEFT,   OUTPUT); 
+  pinMode(PIN_STROP_RIGHT,  OUTPUT); 
+  pinMode(PIN_STRIP_OCT,    OUTPUT); 
+  
+  pinMode(PIN_DOOR   , INPUT_PULLUP);
+  pinMode(PIN_SEAT_FL, INPUT_PULLUP);
+  pinMode(PIN_SEAT_FR, INPUT_PULLUP);
+  pinMode(PIN_SEAT_RL, INPUT_PULLUP);
+  pinMode(PIN_SEAT_RR, INPUT_PULLUP);
 
-  pinMode(INPUT_DOOR   , INPUT_PULLUP);
-  pinMode(INPUT_SEAT_FL, INPUT_PULLUP);
-  pinMode(INPUT_SEAT_FR, INPUT_PULLUP);
-  pinMode(INPUT_SEAT_RL, INPUT_PULLUP);
-  pinMode(INPUT_SEAT_RR, INPUT_PULLUP);
-
-  analogWrite(PIN_WHITE_LIGHT, LIGHT_LOW);
+  //analogWrite(PIN_WHITE_LIGHT, LIGHT_LOW);
 
 
   //Init custom zones
   for (uint8_t i = 0; i < 10; i++) {
     customZoneDefined[i] = false;
   }
+
+  //processLine("CMDON");
 }
 
 
 
 void loop() {
 
-  inputManager();
+  //inputManager();
   serialManager();
-  executeQueue();
   animationManager();
   showAnimation();
 
@@ -80,19 +99,54 @@ void loop() {
 void serialManager() {
   while (Serial.available()) {
     char c = Serial.read();
+    
+    //every CR 
+    if (c == '\r') {
+      rxBuffer[rxPos] = '\0';
+      //The shortest command is 5 charatters + CR
+      if (rxPos > 5) {
+        //It cleans the string
+        trim(rxBuffer);
+        
+        if (strchr(rxBuffer, ';') == NULL) {
+          // Single command
+          processLine(rxBuffer);
+        } else {
+          //Multiple commands in one single string
+          char* p = rxBuffer;
 
-    if (c == '\r' || c == '\n') {
-      if (rxPos > 0) {
-        rxBuf[rxPos] = '\0';
-        processLine(rxBuf);
+          while (*p != '\0') {
+
+            // trova il separatore
+            char* sep = strchr(p, ';');
+
+            if (sep != NULL) {
+              *sep = '\0';          // chiude il comando corrente
+            }
+
+            if (strlen(p) > 0) {   // evita comandi vuoti
+              processLine(p);
+            }
+
+            if (sep == NULL) {
+              break;               // ultimo comando
+            }
+
+            p = sep + 1;           // passa al comando successivo
+          }
+
+        }
+        rxPos = 0;
+      } else {
         rxPos = 0;
       }
-    }
-    else {
+
+    } else {
+      //Build the buffer
       if (rxPos < SERIAL_BUF_LEN - 1) {
-        rxBuf[rxPos++] = c;
-      }
-      else {
+        //fills the buffer
+        rxBuffer[rxPos++] = c;
+      } else {
         // overflow → scarta linea
         Serial.println("Overflow");
         rxPos = 0;
@@ -104,39 +158,64 @@ void serialManager() {
 
 
 
-void processLine(const char* line) {
+void trim(char* s) {
+  while (*s) {
+    if (*s == ' ' || *s == '\r' || *s == '\n' || *s == '\t') *s = "";
+    s++;
+  }
+}
 
-  // ---- special commands ----
+
+
+void processLine(const char* line) {
+  Command cmd;
+
+  // -------- special commands --------
+
+    if (!strcmp(line, "RESET")) {
+    skipTimer = true;
+    softwareReset();
+    return;
+  }
+
   if (!strcmp(line, "CMDSTART")) {
-    cmdIndex = 0
-    //executeQueue();
+    commandsIndex = 0;
+    runQueue = true;
     return;
   }
 
   if (!strcmp(line, "CMDSTOP")) {
-    cmdIndex = cmdCount;
-    //stopExecution();
-    return;
-  }
-
-  if (!strcmp(line, "RESET")) {
-    cmdCount = 0; 
-    cmdIndex = 0;
-    //resetSystem();
+    commandsCount = 0; 
+    commandsIndex = 0;
+    runQueue = false;
+    skipTimer = true;
+    //avoit waiting for the timer
     return;
   }
 
   if (!strcmp(line, "CMDON")) {
-    //powerOn();
+    commandsCount = 1; 
+    commandsIndex = 0;
+    skipTimer = true;
+    if (parseCommand("FIXTOP0000FF",  cmd)) {
+      cmdQueue[0] = cmd;
+    }
+    runQueue = true;
     return;
   }
 
   if (!strcmp(line, "CMDOFF")) {
-    //powerOff();
+    commandsCount = 1; 
+    commandsIndex = 0;
+    skipTimer = true;
+    if (parseCommand("FIXALL000000",  cmd)) {
+      cmdQueue[0] = cmd;
+    }
+    runQueue = true;
     return;
   }
 
-  // ---- custom zone commands ----
+  // -------- custom zone commands --------
   if (!strncmp(line, "SETC", 4)) {
     handleSetZone(line);
     return;
@@ -147,25 +226,29 @@ void processLine(const char* line) {
     return;
   }
 
-  // ---- bufferizable commands ----
-  if (cmdCount >= CMD_QUEUE_SIZE) {
-    // coda piena → scarta
-    Serial.println("Buffer full");
+  // -------- bufferizable commands --------
+  if (commandsCount >= CMD_QUEUE_SIZE) {
+    // Full queue - it does nothing
+    Serial.println("Commands queue is full"); 
     return;
   }
 
-Command cmd;
-  if (parseCommand(line, cmd)) {
-    cmdQueue[cmdCount++] = cmd;
+  if (parseCommand(line,  cmd)) {
+    cmdQueue[commandsCount++] = cmd;
+    printCommand(cmd);  
+    Serial.print("Queue: ");
+    Serial.println(commandsCount);
   }
 }
 
 
 
 bool parseCommand(const char* s, Command& cmd) {
+  memset(&cmd, 0, sizeof(Command)); //resets the cmd variable
 
   // FIX
   if (!strncmp(s, "FIX", 3)) {
+    
     cmd.type   = CMD_FIX;
     cmd.target = decodeTarget(s + 3);
     cmd.h = hexByte(s + 6);
@@ -198,7 +281,7 @@ bool parseCommand(const char* s, Command& cmd) {
     cmd.type   = CMD_BLK;
     cmd.target = decodeTarget(s + 3);
     cmd.ms_on  = decWord(s + 6);
-    cmd.ms_off = decWord(s + 10);
+    cmd.ms_off = decWord(s + 11);
     return true;
   }
   // ANM
@@ -215,16 +298,20 @@ bool parseCommand(const char* s, Command& cmd) {
   // WIT
   if (!strncmp(s, "WIT", 3)) {
     cmd.type = CMD_WIT;
-    cmd.sec  = decWord(s + 3);
+    cmd.sec  = decByte3(s + 3);
     return true;
   }
   // REP
   if (!strncmp(s, "REP", 3)) {
     cmd.type   = CMD_REP;
-    cmd.repeat = decWord(s + 3);
+    cmd.repeat = decByte3(s + 3);
     return true;
   }
-  Serial.print("Unknown command: "); Serial.println(s);
+
+  #ifdef DEVELOP
+  Serial.print("Unknown command: "); 
+  Serial.println(s);
+  #endif
   return false;
 }
 
@@ -258,7 +345,7 @@ Target decodeTarget(const char* s) {
 
   // Default
   Serial.print("Unknown target: "); Serial.println(s);
-  return T_ERR; 
+  return T_NOT; 
 }
 
 
@@ -270,7 +357,7 @@ Dir decodeDir(const char* s) {
 
   // Default in caso di errore
   Serial.print("Unknown direction: "); Serial.println(s);
-  return DIR_ERR;
+  return DIR_NOD;
 }
 
 
@@ -325,7 +412,7 @@ uint8_t hexNibble(char c) {
 
 uint16_t decWord(const char* p) {
   uint16_t v = 0;
-  for (uint8_t i = 0; i < 4; i++) {
+  for (uint8_t i = 0; i < 5; i++) {
     v = v * 10 + (p[i] - '0');
   }
   return v;
@@ -335,50 +422,60 @@ uint8_t decByte(const char* p) {
   return (p[0] - '0') * 10 + (p[1] - '0');
 }
 
-
-
-
-// ------------------- EXECUTION -------------------
-void executeQueue() {
-  if (cmdIndex >= cmdCount) return;
-  Command& cmd = cmdQueue[cmdIndex];
-
-  switch(cmd.type) {
-    case CMD_FIX:
-      // esempio: color fill
-      fillZone(cmd.target, cmd.h, cmd.s, cmd.v);
-      break;
-    case CMD_DIM:
-      // esempio: fade
-      dimZone(cmd.target, cmd.direction, cmd.ms_on);
-      break;
-    case CMD_BLK:
-      blinkZone(cmd.target, cmd.ms_on, cmd.ms_off);
-      break;
-    case CMD_SHD:
-      shadeZone(cmd.target, cmd.h, cmd.s, cmd.v, cmd.h2, cmd.s2, cmd.v2);
-      break;
-    case CMD_ANM:
-      runAnim(cmd.target, cmd.anim_number, cmd.anim_speed, cmd.h, cmd.s, cmd.v);
-      break;
-    case CMD_WIT:
-      waitSeconds(cmd.sec);
-      break;
-    case CMD_REP:
-      repeatLast(cmd.repeat);
-      break;
-    default:
-      break;
-  }
-  cmdIndex++; // next
+uint8_t decByte3(const char* p) {
+  return (p[0] - '0') * 100 + (p[1] - '0') * 10 + (p[2] - '0');
 }
 
 
-// ------------------- PLACEHOLDER FUNCTIONS -------------------
-void fillZone(Target t, uint8_t h, uint8_t s, uint8_t v) { /* riempi la zona con colore */ }
-void dimZone(Target t, Dir d, uint16_t ms) { /* fade UP/DW */ }
-void blinkZone(Target t, uint16_t ms_on, uint16_t ms_off) { /* blink */ }
-void shadeZone(Target t, uint8_t h1,uint8_t s1,uint8_t v1,uint8_t h2,uint8_t s2,uint8_t v2){ }
-void runAnim(Target t,uint8_t num,uint8_t sp,uint8_t h,uint8_t s,uint8_t v){ }
-void waitSeconds(uint16_t sec){ }
-void repeatLast(uint16_t repeat){ }
+
+
+
+void printCommand(const Command& c) {
+  Serial.print(CMDSTRINGS[c.type]);
+  Serial.print(" ");
+  Serial.print(TARGETSTRING[c.target]);
+  Serial.print(" ");
+  Serial.print(DIRSTRINGS[c.direction]);
+
+  Serial.print(" (");
+  Serial.print(c.h);
+  Serial.print(" ");
+  Serial.print(c.s);
+  Serial.print(" ");
+  Serial.print(c.v);
+
+  Serial.print(") (");
+  Serial.print(c.h2);
+  Serial.print(" ");
+  Serial.print(c.s2);
+  Serial.print(" ");
+  Serial.print(c.v2);
+
+  Serial.print(")   sec ");
+  Serial.print(c.sec);
+
+  Serial.print(",   ms_on ");
+  Serial.print(c.ms_on);
+
+  Serial.print(",   ms_off ");
+  Serial.print(c.ms_off);
+
+  Serial.print(",   anim ");
+  Serial.print(c.anim_number);
+
+  Serial.print(",   speed ");
+  Serial.print(c.anim_speed);
+
+  Serial.print(",   rep ");
+  Serial.print(c.repeat);
+
+  Serial.println("");
+}
+
+
+
+void softwareReset() {
+  void (*resetFunc)(void) = 0;
+  resetFunc();
+}
+

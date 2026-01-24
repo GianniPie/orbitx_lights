@@ -1,6 +1,45 @@
 #ifndef DEFINES_H
 #define DEFINES_H
 
+#ifdef DEVELOP
+
+//Strips definitions
+//------------------------------------------
+#define NUM_STRIPS 3
+#define LEDS_STRIP_LEFT 8
+#define LEDS_STRIP_RIGHT 8
+#define LEDS_STRIP_OCT 8
+#define NUM_LEDS (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT + LEDS_STRIP_OCT)
+
+//Zones definitions
+//------------------------------------------
+# define LFT_LENGHT LEDS_STRIP_LEFT
+# define RGT_LENGHT LEDS_STRIP_RIGHT
+# define OCT_LENGHT LEDS_STRIP_OCT
+# define TOP_LENGHT (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT)
+# define ALL_LENGHT (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT + LEDS_STRIP_OCT)
+# define PFL_LENGHT 2
+# define PFR_LENGHT 2
+# define PRL_LENGHT 2
+# define PRR_LENGHT 2
+# define FNT_LENGHT 3
+# define RAR_LENGHT 3
+
+# define LFT_FIRST 0
+# define RGT_FIRST LEDS_STRIP_LEFT
+# define OCT_FIRST (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT)
+# define TOP_FIRST LFT_FIRST
+# define ALL_FIRST 0
+# define PFL_FIRST LFT_FIRST + 2
+# define PFR_FIRST RGT_FIRST + 2
+# define PRL_FIRST LFT_FIRST + 5
+# define PRR_FIRST RGT_FIRST + 5
+# define FNT_FIRST (LEDS_STRIP_LEFT - FNT_LENGHT)
+# define RAR_FIRST (LEDS_STRIP_LEFT - RAR_LENGHT)
+
+#endif
+
+#ifdef PRODUCTION
 
 //Strips definitions
 //------------------------------------------
@@ -9,7 +48,6 @@
 #define LEDS_STRIP_RIGHT 250
 #define LEDS_STRIP_OCT 200
 #define NUM_LEDS (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT + LEDS_STRIP_OCT)
-
 
 //Zones definitions
 //------------------------------------------
@@ -25,7 +63,6 @@
 # define FNT_LENGHT 50
 # define RAR_LENGHT 50
 
-
 # define LFT_FIRST 0
 # define RGT_FIRST LEDS_STRIP_LEFT
 # define OCT_FIRST (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT)
@@ -38,22 +75,23 @@
 # define FNT_FIRST (LEDS_STRIP_LEFT - FNT_LENGHT)
 # define RAR_FIRST (LEDS_STRIP_LEFT - RAR_LENGHT)
 
+#endif
 
 
 //HW Inputs
 //------------------------------------------
-#define PIN_DOOR         2
-#define PIN_SEAT_FL      3
-#define PIN_SEAT_FR      4
-#define PIN_SEAT_RL      5
-#define PIN_SEAT_RR      6
+#define PIN_DOOR         A0
+#define PIN_SEAT_FL      A1
+#define PIN_SEAT_FR      A2
+#define PIN_SEAT_RL      A3
+#define PIN_SEAT_RR      A4
 
 
 //HW Outputs
 //------------------------------------------
-#define PIN_STRIP_LEFT      6
+#define PIN_STRIP_LEFT      5
 #define PIN_STROP_RIGHT     7
-#define PIN_STRIP_OCT       8
+#define PIN_STRIP_OCT       6
 #define PIN_WHITE_LIGHT     11
 
 
@@ -89,7 +127,6 @@
 //------------------------------------------
 enum Cmd : uint8_t {
   CMD_ERR,
-
   CMD_FIX,
   CMD_DIM,
   CMD_SHD,
@@ -97,7 +134,6 @@ enum Cmd : uint8_t {
   CMD_BLK,
   CMD_WIT,
   CMD_REP,
-
   CMD_START,
   CMD_STOP,
   CMD_ON,
@@ -107,8 +143,7 @@ enum Cmd : uint8_t {
 
 
 enum Target : uint8_t {
-  T_ERR,
-  
+  T_NOT,
   T_LFT,
   T_RGT,
   T_OCT,
@@ -134,8 +169,7 @@ enum Target : uint8_t {
 
 
 enum Dir : uint8_t {
-  DIR_ERR,
-
+  DIR_NOD,
   DIR_UP,
   DIR_DW
 };
@@ -175,5 +209,52 @@ struct Command {
   uint16_t  repeat;       // REP → 0–999 
 };
 
+
+const String CMDSTRINGS[] = {
+  "ERR  ",
+  "FIX  ",
+  "DIM  ",
+  "SHD  ",
+  "ANM  ",
+  "BLK  ",
+  "WIT  ",
+  "REP  ",
+  "START",
+  "STOP ",
+  "ON   ",
+  "OFF  ",
+  "RESET"
+};
+
+const String TARGETSTRING[] = {
+  "NOT",
+  "LFT",
+  "RGT",
+  "OCT",
+  "TOP",
+  "ALL",
+  "PFL",
+  "PFR",
+  "PRL",
+  "PRR",
+  "FNT",
+  "RAR",
+  "C01",
+  "C02",
+  "C03",
+  "C04",
+  "C05",
+  "C06",
+  "C07",
+  "C08",
+  "C09",
+  "C10"
+};
+
+const String DIRSTRINGS[] = {
+  "NOD",
+  "UP ",
+  "DW "
+};
 
 #endif

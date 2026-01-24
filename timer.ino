@@ -11,7 +11,33 @@ void callback() {
     every10msCounter = 0;
     //Code here for events every 10ms
 
+    //BLK timer
+    if(blink.msOn == 0) {
+      blink.stateOn = false;
+      //Time off: it turn off the selected zone
+      for (uint16_t i = blink.first; i <= blink.last; i++) {
+        leds[i] = CRGB::Black;
+      }
 
+      //When timeOn is over, it executes timeOff
+      if(blink.msOff == 0) {
+        blink.stateOff = false;
+        
+        //When the time off it's over it show the previews backuped configuration
+        for (uint16_t i = blink.first; i <= blink.last; i++) {
+          leds[i] = blkBackup[i];
+        }
+        blink.active = false;  //Timer unloked, the queue can go on 
+        waitForTimer = false;
+        
+      } else {
+        blink.msOff--;
+      }
+
+    } else {
+      blink.msOn--;
+      //Time on: it doesn nothing because it shows the previws color
+    }
 
 
     //***************************************************************************
@@ -27,6 +53,15 @@ void callback() {
         every1sCounter = 0;
         //Code here for events every 1 second
 
+        //WIT timer
+        if(waitForTimer) {
+          if (waitSecondsCounter == 0) {
+            waitForTimer = false;  //Timer unloked
+          } else {
+            waitSecondsCounter--;
+          }
+        }
+        
 
       
 
