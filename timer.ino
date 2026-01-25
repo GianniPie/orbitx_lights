@@ -5,38 +5,50 @@ void callback() {
   //Code here for events every 1ms
 
 
-
   //***************************************************************************
   if (every10msCounter == 10) {
     every10msCounter = 0;
     //Code here for events every 10ms
 
+  animTick++;
+
+  if (animTick >= animSpeed) {
+    animTick = 0;
+    tickAnim = true;   // dà il consenso all'update
+  }
+
+  
     //BLK timer
-    if(blink.msOn == 0) {
-      blink.stateOn = false;
-      //Time off: it turn off the selected zone
-      for (uint16_t i = blink.first; i <= blink.last; i++) {
-        leds[i] = CRGB::Black;
-      }
-
-      //When timeOn is over, it executes timeOff
-      if(blink.msOff == 0) {
-        blink.stateOff = false;
-        
-        //When the time off it's over it show the previews backuped configuration
+    if(blink.active) {
+      if(blink.msOn == 0) {
+        blink.stateOn = false;
+        //Time off: it turn off the selected zone
         for (uint16_t i = blink.first; i <= blink.last; i++) {
-          leds[i] = blkBackup[i];
+          leds[i] = CRGB::Black;
         }
-        blink.active = false;  //Timer unloked, the queue can go on 
-        waitForTimer = false;
-        
-      } else {
-        blink.msOff--;
-      }
 
-    } else {
-      blink.msOn--;
-      //Time on: it doesn nothing because it shows the previws color
+        //When timeOn is over, it executes timeOff
+        if(blink.active) {
+          
+        }
+        if(blink.msOff == 0) {
+          blink.stateOff = false;
+          
+          //When the time off it's over it show the previews backuped configuration
+          for (uint16_t i = blink.first; i <= blink.last; i++) {
+            leds[i] = blkBackup[i];
+          }
+          blink.active = false;  //Timer unloked, the queue can go on 
+          waitForTimer = false;
+          
+        } else {
+          blink.msOff--;
+        }
+
+      } else {
+        blink.msOn--;
+        //Time on: it doesn nothing because it shows the previws color
+      }
     }
 
 

@@ -21,8 +21,8 @@ void animationManager() {
 // ------------------- EXECUTION -------------------
 void executeQueue() {
   if(commandsIndex >= commandsCount) return;   
-  if(!skipTimer) {
-    if(waitForTimer) return;
+  if(!skipTimer) {            //Skip Timper for CMD commands and RESET
+    if(waitForTimer) return;  //Used in BLK and WIT
   }
   skipTimer = false;
 
@@ -34,6 +34,9 @@ void executeQueue() {
 
 
 void executeCommand(Command cmd) {
+  Serial.print("Executing: ");
+  Serial.println(CMDSTRINGS[cmd.type]);
+
   switch(cmd.type) {
     case CMD_FIX:
       // esempio: color fill
@@ -120,6 +123,7 @@ void blinkZone(Target t, uint16_t ms_on, uint16_t ms_off) {
   uint16_t first, last;
   if (!getTargetRange(t, first, last)) return;
 
+
   //led strip backup
   for (uint16_t i = first; i <= last; i++) {
     blkBackup[i] = leds[i];
@@ -139,24 +143,101 @@ void blinkZone(Target t, uint16_t ms_on, uint16_t ms_off) {
 
 
 void repeatLast(uint16_t repeat){ 
-  // if(repeat) {
-  //   cmdQueue[commandsIndex].repeat--;
-  //   commandsIndex--;
-  // }
+  if(repeat > 0) {
+    cmdQueue[commandsIndex].repeat--;
+    commandsIndex = commandsIndex-2;
+  }
 }
 
 
 
+
+void runAnim(Target t, uint8_t num, uint8_t sp, uint8_t h, uint8_t s, uint8_t v){ 
+  uint16_t first, last;
+  if (!getTargetRange(t, first, last)) return;
+  animSpeed = sp;
+
+ switch(num) {
+    case 0:
+      break;
+    case 1:
+      
+      if (!animActive) {
+        animFirst = first;
+        animLast = last;
+        initStars(animFirst, animLast);
+        animActive = true;
+      }
+      break;
+
+    default:
+      Serial.println("The animation does't exist");
+      break;
+  }
+
+}
+
+
 void showAnimation() {
-  return;
+
+  if (!tickAnim) return;
+  tickAnim = false;
+
+  if (!animActive) return;
+
+  updateStars(animFirst, animLast);
+  FastLED.show();
+
+}
+
+
+void initStars(uint16_t first, uint16_t last) {
+  for (uint8_t i = 0; i < MAX_STARS; i++) {
+    stars[i].active = false;
+  }
+}
+
+
+void updateStars(uint16_t first, uint16_t last) {
+
+  // fondo nero
+  for (uint16_t i = first; i <= last; i++) {
+    leds[i].fadeToBlackBy(40);
+  }
+
+  // spawn nuove stelle
+  if (random8() < 30) {
+    for (uint8_t i = 0; i < MAX_STARS; i++) {
+      if (!stars[i].active) {
+        stars[i].active = true;
+        stars[i].pos = first;
+        stars[i].speed = random(1, 4);
+        stars[i].bright = 20;
+        break;
+      }
+    }
+  }
+
+  // aggiorna stelle
+  for (uint8_t i = 0; i < MAX_STARS; i++) {
+    if (!stars[i].active) continue;
+
+    stars[i].pos += stars[i].speed;
+    stars[i].bright = qadd8(stars[i].bright, 20);
+
+    if (stars[i].pos > last) {
+      stars[i].active = false;
+      continue;
+    }
+
+    leds[stars[i].pos] += CHSV(0, 0, stars[i].bright);
+  }
 }
 
 
 
 // ------------------- PLACEHOLDER FUNCTIONS -------------------
 void dimZone(Target t, Dir d, uint16_t ms) { /* fade UP/DW */ }
-void runAnim(Target t,uint8_t num,uint8_t sp,uint8_t h,uint8_t s,uint8_t v){ }
-
 
 
 

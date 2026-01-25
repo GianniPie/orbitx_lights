@@ -78,54 +78,17 @@
 #endif
 
 
-//HW Inputs
-//------------------------------------------
-#define PIN_DOOR         A0
-#define PIN_SEAT_FL      A1
-#define PIN_SEAT_FR      A2
-#define PIN_SEAT_RL      A3
-#define PIN_SEAT_RR      A4
-
 
 //HW Outputs
 //------------------------------------------
 #define PIN_STRIP_LEFT      5
 #define PIN_STROP_RIGHT     7
 #define PIN_STRIP_OCT       6
-#define PIN_WHITE_LIGHT     11
-
-
-//Default colors (not used in production)
-//------------------------------------------
-#define RED         0x00FF00
-#define ORANGE      0x15FF00
-#define YELLOW      0xFFFF00
-#define GREEN       0xFF0000
-#define LIGHTBLUE   0xFF00FF
-#define BLUE        0x0000FF
-#define MAGENTA     0x00FFFF
-#define WHITE       0xFFFFFF
-
-
-#define INPUT_DOOR         2
-#define INPUT_SEAT_FL      3
-#define INPUT_SEAT_FR      4
-#define INPUT_SEAT_RL      5
-#define INPUT_SEAT_RR      6
-
-
-#define LIGHT_OFF       0
-#define LIGHT_LOW       10
-#define LIGHT_MID       50
-#define LIGHT_HIGH      130
-#define LIGHT_MAX       255
-#define SATURATION_MAX  255
-
 
 
 //Serial commands
 //------------------------------------------
-enum Cmd : uint8_t {
+enum Type : uint8_t {
   CMD_ERR,
   CMD_FIX,
   CMD_DIM,
@@ -182,52 +145,63 @@ struct LedRange {
 };
 
 
-
-/*
-	•	sec → solo WIT
-	•	ms_on → DIM e BLK
-	•	ms_off → solo BLK
-	•	direction → solo DIM
-	•	anim_number, anim_speed → solo ANM
-	•	repeat → solo REP
-	•	campi non usati non vanno letti
-*/
 struct Command {
-  Cmd       type;         // all commands
+  Type      type;         // all commands
   Target    target;       // commands with a target
-  Dir       direction;    // DIM → UP / DW
+  Dir       direction;    // DIM UP / DW
 
   uint8_t   h, s, v;      // color 1 FIX, ANM, SHD
   uint8_t   h2, s2, v2;   // color 2 SHD
 
-  uint16_t  sec;          // WIT → seconds (0–999)
-  uint16_t  ms_on;        // DIM, BLK → milliseconds (0-65535)
-  uint16_t  ms_off;       // BLK → milliseconds (0-65535)
+  uint16_t  sec;          // WIT  seconds (0–999)
+  uint16_t  ms_on;        // DIM, BLK  milliseconds (0-65535)
+  uint16_t  ms_off;       // BLK  milliseconds (0-65535)
 
-  uint8_t   anim_number;  // ANM → animation ID (0–99)
-  uint8_t   anim_speed;   // ANM → speed preset (0–9)
-  uint16_t  repeat;       // REP → 0–999 
+  uint8_t   anim_number;  // ANM  animation ID (0–99)
+  uint8_t   anim_speed;   // ANM  speed preset (0–9)
+  uint16_t  repeat;       // REP  0–999 
 };
+
+
+struct BlinkState {
+  uint16_t first;
+  uint16_t last;
+  uint16_t msOn;
+  uint16_t msOff;
+  bool stateOn;
+  bool stateOff;
+  bool active;
+};
+
+
+struct Star {
+  int16_t pos;     // posizione LED
+  int8_t  speed;   // velocità (1–3)
+  uint8_t bright;  // luminosità
+  bool active;
+};
+
+#define MAX_STARS 10
 
 
 const String CMDSTRINGS[] = {
-  "ERR  ",
-  "FIX  ",
-  "DIM  ",
-  "SHD  ",
-  "ANM  ",
-  "BLK  ",
-  "WIT  ",
-  "REP  ",
+  "ERR",
+  "FIX",
+  "DIM",
+  "SHD",
+  "ANM",
+  "BLK",
+  "WIT",
+  "REP",
   "START",
-  "STOP ",
-  "ON   ",
-  "OFF  ",
+  "STOP",
+  "ON",
+  "OFF",
   "RESET"
 };
 
-const String TARGETSTRING[] = {
-  "NOT",
+const char* TARGETSTRING[] = {
+  "---",
   "LFT",
   "RGT",
   "OCT",
@@ -252,9 +226,9 @@ const String TARGETSTRING[] = {
 };
 
 const String DIRSTRINGS[] = {
-  "NOD",
-  "UP ",
-  "DW "
+  "--",
+  "UP",
+  "DW"
 };
 
 #endif

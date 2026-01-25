@@ -1,5 +1,23 @@
 #include "defines.h"
 
+#ifdef INPUTS_MANAGED
+
+//HW Inputs
+//------------------------------------------
+#define PIN_DOOR         A0
+#define PIN_SEAT_FL      A1
+#define PIN_SEAT_FR      A2
+#define PIN_SEAT_RL      A3
+#define PIN_SEAT_RR      A4
+
+#define INPUT_DOOR         2
+#define INPUT_SEAT_FL      3
+#define INPUT_SEAT_FR      4
+#define INPUT_SEAT_RL      5
+#define INPUT_SEAT_RR      6
+
+
+
 uint8_t inputKeysRegister, oldKeysRegister, xorKeysRegister, keysRegister, keysRegisterPressed, keysRegisterReleased, keysRegisterLongPress, oldMainKeysRegister = 0;
 uint8_t counterDebounce, counterLongPress, longPressCounter = 0;
 uint8_t max_debounce = 5;
@@ -64,3 +82,5 @@ void inputsRead(void) {
   keysRegisterReleased = (~(keysRegister)) & oldMainKeysRegister;
   oldMainKeysRegister = keysRegister;
 }
+
+#endif
