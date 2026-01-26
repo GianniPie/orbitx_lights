@@ -37,6 +37,12 @@
 # define FNT_FIRST (LEDS_STRIP_LEFT - FNT_LENGHT)
 # define RAR_FIRST (LEDS_STRIP_LEFT - RAR_LENGHT)
 
+//HW Outputs
+//------------------------------------------
+#define PIN_STRIP_LEFT      5
+#define PIN_STROP_RIGHT     7
+#define PIN_STRIP_OCT       6
+
 #endif
 
 #ifdef PRODUCTION
@@ -44,9 +50,9 @@
 //Strips definitions
 //------------------------------------------
 #define NUM_STRIPS 3
-#define LEDS_STRIP_LEFT 250
-#define LEDS_STRIP_RIGHT 250
-#define LEDS_STRIP_OCT 200
+#define LEDS_STRIP_LEFT 249
+#define LEDS_STRIP_RIGHT 249
+#define LEDS_STRIP_OCT 121
 #define NUM_LEDS (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT + LEDS_STRIP_OCT)
 
 //Zones definitions
@@ -75,15 +81,15 @@
 # define FNT_FIRST (LEDS_STRIP_LEFT - FNT_LENGHT)
 # define RAR_FIRST (LEDS_STRIP_LEFT - RAR_LENGHT)
 
+//HW Outputs
+//------------------------------------------
+#define PIN_STRIP_LEFT      7
+#define PIN_STROP_RIGHT     6
+#define PIN_STRIP_OCT       5
+
 #endif
 
 
-
-//HW Outputs
-//------------------------------------------
-#define PIN_STRIP_LEFT      5
-#define PIN_STROP_RIGHT     7
-#define PIN_STRIP_OCT       6
 
 
 //Serial commands
@@ -181,7 +187,27 @@ struct Star {
   bool active;
 };
 
-#define MAX_STARS 10
+
+struct Anim {
+  uint8_t   number;
+  uint16_t  first;
+  uint16_t  last;
+  uint8_t   h;
+  uint8_t   s; 
+  uint8_t   v;
+  uint8_t   speed;
+};
+
+
+struct Dim {
+  bool      active;
+  uint16_t  first;
+  uint16_t  last;
+  uint16_t  duration;   
+  uint16_t  counter;
+  bool      up;              // true = UP, false = DW
+};
+
 
 
 const String CMDSTRINGS[] = {

@@ -1,11 +1,19 @@
+//Vr  1.3
+
+
 #define DEBUG
 //#define INPUTS_MANAGED
 
-#define DEVELOP
-//#define PRODUCTION
+#if defined(ARDUINO_AVR_UNO)
+  #define DEVELOP
+#else
+  #define PRODUCTION
+#endif
 
-#include <FastLED.h>
+
 #include "defines.h"
+#include <FastLED.h>
+#include <avr/wdt.h>
 
 //It create the working arrray (only one for all the 3 strips)
 //strip leds in array are LEFT, RIGHT, OCTAGON in sequence
@@ -34,20 +42,32 @@ bool skipTimer = false;
 bool waitForTimer = false;
 uint16_t waitSecondsCounter = 0;  //WIT
 
+//Animations
+//-------------------------
+CRGB animBackup[NUM_LEDS];   // backup strip
 
+//Blink
 BlinkState blink;
-CRGB blkBackup[NUM_LEDS];   // snapshot colori
 
+//Alternate
+uint8_t animStep = 0;   // 0 = A→B, 1 = B→A, 2 = DONEuint8_t animStep = 0;   // 0 = A→B, 1 = B→A, 2 = DONE
+uint16_t animCounter = 0;
+uint16_t animPeriod = 0;
 
+//hyperspace
+#define MAX_STARS 5
 Star stars[MAX_STARS];
 volatile bool tickAnim = false;
-volatile uint8_t animTick = 0;
-uint8_t animSpeed = 5;   // preso da cmd.anim_speed
+volatile uint8_t animTickCounter = 0;
 bool animActive = false;
-uint16_t animFirst, animLast;
+Anim currentAnim;
+
+//Dim
+Dim dim;
 
 
 void setup() {
+  wdt_disable(); 
 
   // Initialize serial communication
   Serial.begin(38400);
@@ -56,9 +76,17 @@ void setup() {
   Timer1.initialize(1000);
   Timer1.attachInterrupt(callback);
 
+#ifdef DEVELOP
   FastLED.addLeds<WS2812B, PIN_STRIP_LEFT,  GRB>(leds + LFT_FIRST, LFT_LENGHT);
   FastLED.addLeds<WS2812B, PIN_STROP_RIGHT, GRB>(leds + RGT_FIRST, RGT_LENGHT);
   FastLED.addLeds<WS2812B, PIN_STRIP_OCT,   GRB>(leds + OCT_FIRST, OCT_LENGHT);
+#endif
+
+#ifdef PRODUCTION
+  FastLED.addLeds<WS2812B, PIN_STRIP_LEFT,  RGB>(leds + LFT_FIRST, LFT_LENGHT);
+  FastLED.addLeds<WS2812B, PIN_STROP_RIGHT, RGB>(leds + RGT_FIRST, RGT_LENGHT);
+  FastLED.addLeds<WS2812B, PIN_STRIP_OCT,   RGB>(leds + OCT_FIRST, OCT_LENGHT);
+#endif
 
   pinMode(LED_BUILTIN,      OUTPUT);
   pinMode(PIN_STRIP_LEFT,   OUTPUT); 
@@ -70,7 +98,8 @@ void setup() {
   //   customZoneDefined[i] = false;
   // }
 
-  //processLine("CMDON");
+  processLine("CMDON");
+  Serial.println("Device ready");
 }
 
 
@@ -95,8 +124,8 @@ void serialManager() {
     //every CR 
     if (c == '\r') {
       rxBuffer[rxPos] = '\0';
-      //The shortest command is 5 charatters + CR
-      if (rxPos > 5) {
+      //The shortest command is 5 charatters
+      if (rxPos >= 5) {
         //It cleans the string
         trim(rxBuffer);
         
@@ -109,25 +138,20 @@ void serialManager() {
 
           while (*p != '\0') {
 
-            // trova il separatore
             char* sep = strchr(p, ';');
-
             if (sep != NULL) {
-              *sep = '\0';          // chiude il comando corrente
+              *sep = '\0';  // closes the command
             }
-
-            if (strlen(p) > 0) {   // evita comandi vuoti
+            if (strlen(p) > 0) { // filters empty commands
               processLine(p);
             }
-
-            if (sep == NULL) {
-              break;               // ultimo comando
+            if (sep == NULL) { // last command
+              break;               
             }
-
-            p = sep + 1;           // passa al comando successivo
+            p = sep + 1;  // next command
           }
-
         }
+        
         rxPos = 0;
       } else {
         rxPos = 0;
@@ -150,21 +174,12 @@ void serialManager() {
 
 
 
-void trim(char* s) {
-  // while (*s) {
-  //   if (*s == ' ' || *s == '\r' || *s == '\n' || *s == '\t') *s = "";
-  //   s++;
-  // }
-  
+void trim(char* s) { 
   char* src = s;
   char* dst = s;
 
   while (*src) {
-    if (*src != '\n' &&
-        *src != '\r' &&
-        *src != '\t' &&
-        *src != '"'  &&
-        *src != ' ') {
+    if (*src != '\n' && *src != '\r' && *src != '\t' && *src != '"'  && *src != ' ') {
       *dst++ = *src;
     }
     src++;
@@ -180,14 +195,14 @@ void processLine(const char* line) {
   Command cmd;
 
   // -------- special commands --------
-
-    if (!strcmp(line, "RESET")) {
+  if (!strcmp(line, "RESET")) {
     softwareReset();
     return;
   }
 
   if (!strcmp(line, "CMDSTART")) {
     commandsIndex = 0;
+    skipTimer = true;
     runQueue = true;
     return;
   }
@@ -196,12 +211,7 @@ void processLine(const char* line) {
     commandsCount = 0; 
     commandsIndex = 0;
     runQueue = false;
-    skipTimer = false;
-    waitForTimer = true;
-    blink.active = false;
-    blink.stateOn = false;
-    blink.stateOff = false;
-    animActive = false;
+    clearForCmd();
     return;
   }
 
@@ -213,10 +223,7 @@ void processLine(const char* line) {
       cmdQueue[0] = cmd;
     }
     runQueue = true;
-    blink.active = false;
-    blink.stateOn = false;
-    blink.stateOff = false;
-    animActive = false;
+    clearForCmd();
     return;
   }
 
@@ -228,10 +235,7 @@ void processLine(const char* line) {
       cmdQueue[0] = cmd;
     }
     runQueue = true;
-    blink.active = false;
-    blink.stateOn = false;
-    blink.stateOff = false;
-    animActive = false;
+    clearForCmd();
     return;
   }
 
@@ -254,11 +258,29 @@ void processLine(const char* line) {
   }
 
   if (parseCommand(line,  cmd)) {
+    clearForNextCommand();
     cmdQueue[commandsCount++] = cmd;
     Serial.print(commandsCount);
     Serial.print('\t');
     printCommand(cmd);  
   }
+}
+
+
+
+void clearForCmd () {
+  skipTimer = false;
+  waitForTimer = false;
+  blink.active = false;
+  blink.stateOn = false;
+  blink.stateOff = false;
+  animActive = false;
+  tickAnim = false;
+}
+
+void clearForNextCommand () {
+  skipTimer = false;
+  blink.active = false;
 }
 
 
@@ -507,8 +529,11 @@ void printCommand(const Command& c) {
 
 
 
+
+
 void softwareReset() {
-  void (*resetFunc)(void) = 0;
-  resetFunc();
+  Serial.println("Reset");
+  wdt_enable(WDTO_15MS);
+  while (1) { }   // attende reset
 }
 

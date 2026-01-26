@@ -4,18 +4,18 @@ void callback() {
   //***************************************************************************
   //Code here for events every 1ms
 
+  animTickCounter++;
+  if (animTickCounter >= currentAnim.speed) {
+    animTickCounter = 0;
+    tickAnim = true;   // da il consenso all'update
+  }
 
   //***************************************************************************
   if (every10msCounter == 10) {
     every10msCounter = 0;
     //Code here for events every 10ms
 
-  animTick++;
-
-  if (animTick >= animSpeed) {
-    animTick = 0;
-    tickAnim = true;   // dà il consenso all'update
-  }
+    tickAnim = true;
 
   
     //BLK timer
@@ -36,7 +36,7 @@ void callback() {
           
           //When the time off it's over it show the previews backuped configuration
           for (uint16_t i = blink.first; i <= blink.last; i++) {
-            leds[i] = blkBackup[i];
+            leds[i] = animBackup[i];
           }
           blink.active = false;  //Timer unloked, the queue can go on 
           waitForTimer = false;
