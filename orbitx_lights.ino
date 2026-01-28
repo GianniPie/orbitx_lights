@@ -1,4 +1,4 @@
-//Vr  1.3
+//Vr  1.5
 
 
 #define DEBUG
@@ -486,7 +486,9 @@ void printCommand(const Command& c) {
   Serial.print(" ");
   Serial.print(c.v);
 
-  Serial.print(") (");
+  Serial.print(")");
+  Serial.print('\t');
+  Serial.print("(");
   Serial.print(c.h2);
   Serial.print(" ");
   Serial.print(c.s2);
@@ -494,7 +496,6 @@ void printCommand(const Command& c) {
   Serial.print(c.v2);
 
   Serial.print(")");
-  Serial.print('\t');
   Serial.print('\t');
   Serial.print("sec ");
   Serial.print(c.sec);
@@ -529,11 +530,13 @@ void printCommand(const Command& c) {
 
 
 
-
-
 void softwareReset() {
-  Serial.println("Reset");
-  wdt_enable(WDTO_15MS);
-  while (1) { }   // attende reset
+    Serial.println("RESETTING...");
+    Serial.flush();             // Assicurati che i dati seriali vengano inviati
+    delay(10);                  // Piccolo ritardo per lasciare passare la seriale
+    cli();                      // Disabilita interrupt
+    wdt_enable(WDTO_15MS);      // Watchdog timer a 15 ms
+    while (1) { }               // Blocca tutto finché il watchdog non resetta
 }
+
 

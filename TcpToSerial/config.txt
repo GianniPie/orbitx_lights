@@ -1,0 +1,6 @@
+# configurazione TCP
+TcpPort=9000
+
+# configurazione seriale
+SerialPort=COM3
+BaudRate=38400

@@ -62,10 +62,10 @@
 # define OCT_LENGHT LEDS_STRIP_OCT
 # define TOP_LENGHT (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT)
 # define ALL_LENGHT (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT + LEDS_STRIP_OCT)
-# define PFL_LENGHT 64
-# define PFR_LENGHT 64
-# define PRL_LENGHT 64
-# define PRR_LENGHT 64
+# define PFL_LENGHT 75
+# define PFR_LENGHT 75
+# define PRL_LENGHT 75
+# define PRR_LENGHT 75
 # define FNT_LENGHT 50
 # define RAR_LENGHT 50
 
@@ -74,10 +74,10 @@
 # define OCT_FIRST (LEDS_STRIP_LEFT + LEDS_STRIP_RIGHT)
 # define TOP_FIRST LFT_FIRST
 # define ALL_FIRST 0
-# define PFL_FIRST LFT_FIRST + 70
-# define PFR_FIRST RGT_FIRST + 70
-# define PRL_FIRST LFT_FIRST + 160
-# define PRR_FIRST RGT_FIRST + 160
+# define PFL_FIRST LFT_FIRST + 66
+# define PFR_FIRST RGT_FIRST + 66
+# define PRL_FIRST LFT_FIRST + 155
+# define PRR_FIRST RGT_FIRST + 155
 # define FNT_FIRST (LEDS_STRIP_LEFT - FNT_LENGHT)
 # define RAR_FIRST (LEDS_STRIP_LEFT - RAR_LENGHT)
 
@@ -210,7 +210,7 @@ struct Dim {
 
 
 
-const String CMDSTRINGS[] = {
+const char* CMDSTRINGS[] = {
   "ERR",
   "FIX",
   "DIM",
@@ -251,7 +251,7 @@ const char* TARGETSTRING[] = {
   "C10"
 };
 
-const String DIRSTRINGS[] = {
+const char* DIRSTRINGS[] = {
   "--",
   "UP",
   "DW"
