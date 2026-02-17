@@ -1,4 +1,4 @@
-//Vr  1.5
+//Vr  1.6
 
 
 #define DEBUG
@@ -39,8 +39,11 @@ uint8_t commandsIndex = 0;  //Index of the command executed
 
 bool runQueue = false;
 bool skipTimer = false;
-bool waitForTimer = false;
-uint16_t waitSecondsCounter = 0;  //WIT
+volatile bool waitForTimer = false;
+volatile bool tickAnim = false;
+volatile uint8_t animTickCounter = 0;
+volatile bool witActive = false;
+volatile uint16_t waitSecondsCounter = 0;  //WIT
 
 //Animations
 //-------------------------
@@ -50,15 +53,11 @@ CRGB animBackup[NUM_LEDS];   // backup strip
 BlinkState blink;
 
 //Alternate
-uint8_t animStep = 0;   // 0 = A→B, 1 = B→A, 2 = DONEuint8_t animStep = 0;   // 0 = A→B, 1 = B→A, 2 = DONE
-uint16_t animCounter = 0;
-uint16_t animPeriod = 0;
+AlternateState alternate;
 
 //hyperspace
-#define MAX_STARS 5
+#define MAX_STARS 30
 Star stars[MAX_STARS];
-volatile bool tickAnim = false;
-volatile uint8_t animTickCounter = 0;
 bool animActive = false;
 Anim currentAnim;
 
@@ -70,36 +69,39 @@ void setup() {
   wdt_disable(); 
 
   // Initialize serial communication
-  Serial.begin(38400);
-  while (!Serial);
+  Serial.begin(9600);
+  while (!Serial) {}
+  delay(100);
+  // Flush garbage
+  while (Serial.available()) Serial.read();
 
   Timer1.initialize(1000);
   Timer1.attachInterrupt(callback);
 
 #ifdef DEVELOP
   FastLED.addLeds<WS2812B, PIN_STRIP_LEFT,  GRB>(leds + LFT_FIRST, LFT_LENGHT);
-  FastLED.addLeds<WS2812B, PIN_STROP_RIGHT, GRB>(leds + RGT_FIRST, RGT_LENGHT);
+  FastLED.addLeds<WS2812B, PIN_STRIP_RIGHT, GRB>(leds + RGT_FIRST, RGT_LENGHT);
   FastLED.addLeds<WS2812B, PIN_STRIP_OCT,   GRB>(leds + OCT_FIRST, OCT_LENGHT);
 #endif
 
 #ifdef PRODUCTION
   FastLED.addLeds<WS2812B, PIN_STRIP_LEFT,  RGB>(leds + LFT_FIRST, LFT_LENGHT);
-  FastLED.addLeds<WS2812B, PIN_STROP_RIGHT, RGB>(leds + RGT_FIRST, RGT_LENGHT);
+  FastLED.addLeds<WS2812B, PIN_STRIP_RIGHT, RGB>(leds + RGT_FIRST, RGT_LENGHT);
   FastLED.addLeds<WS2812B, PIN_STRIP_OCT,   RGB>(leds + OCT_FIRST, OCT_LENGHT);
 #endif
 
   pinMode(LED_BUILTIN,      OUTPUT);
   pinMode(PIN_STRIP_LEFT,   OUTPUT); 
-  pinMode(PIN_STROP_RIGHT,  OUTPUT); 
+  pinMode(PIN_STRIP_RIGHT,  OUTPUT); 
   pinMode(PIN_STRIP_OCT,    OUTPUT); 
 
   //Init custom zones
   // for (uint8_t i = 0; i < 10; i++) {
   //   customZoneDefined[i] = false;
   // }
-
+  Serial.print("Release ");
+  Serial.println(FW_VERSION);
   processLine("CMDON");
-  Serial.println("Device ready");
 }
 
 
@@ -186,7 +188,6 @@ void trim(char* s) {
   }
 
   *dst = '\0';
-  return s;
 }
 
 
@@ -196,14 +197,15 @@ void processLine(const char* line) {
 
   // -------- special commands --------
   if (!strcmp(line, "RESET")) {
+    clearForCmd();
     softwareReset();
     return;
   }
 
   if (!strcmp(line, "CMDSTART")) {
     commandsIndex = 0;
-    skipTimer = true;
     runQueue = true;
+    clearForCmd();
     return;
   }
 
@@ -219,7 +221,7 @@ void processLine(const char* line) {
     commandsCount = 1; 
     commandsIndex = 0;
     skipTimer = true;
-    if (parseCommand("FIXTOP0000FF",  cmd)) {
+    if (parseCommand("FIXTOP0000FFY",  cmd)) {
       cmdQueue[0] = cmd;
     }
     runQueue = true;
@@ -231,24 +233,14 @@ void processLine(const char* line) {
     commandsCount = 1; 
     commandsIndex = 0;
     skipTimer = true;
-    if (parseCommand("FIXALL000000",  cmd)) {
+    if (parseCommand("FIXALL000000Y",  cmd)) {
       cmdQueue[0] = cmd;
     }
     runQueue = true;
     clearForCmd();
     return;
   }
-
-  // -------- custom zone commands --------
-  // if (!strncmp(line, "SETC", 4)) {
-  //   handleSetZone(line);
-  //   return;
-  // }
-
-  // if (!strncmp(line, "GETC", 4)) {
-  //   handleGetZone(line);
-  //   return;
-  // }
+  
 
   // -------- bufferizable commands --------
   if (commandsCount >= CMD_QUEUE_SIZE) {
@@ -269,17 +261,16 @@ void processLine(const char* line) {
 
 
 void clearForCmd () {
-  skipTimer = false;
+  skipTimer = true;
   waitForTimer = false;
   blink.active = false;
-  blink.stateOn = false;
-  blink.stateOff = false;
   animActive = false;
   tickAnim = false;
 }
 
 void clearForNextCommand () {
   skipTimer = false;
+  waitForTimer = true;
   blink.active = false;
 }
 
@@ -296,6 +287,7 @@ bool parseCommand(const char* s, Command& cmd) {
     cmd.h = hexByte(s + 6);
     cmd.s = hexByte(s + 8);
     cmd.v = hexByte(s + 10);
+    cmd.show = decodeShow(s + 12);
     return true;
   }
   // DIM
@@ -316,6 +308,7 @@ bool parseCommand(const char* s, Command& cmd) {
     cmd.h2 = hexByte(s + 12);
     cmd.s2 = hexByte(s + 14);
     cmd.v2 = hexByte(s + 16);
+    cmd.show = decodeShow(s + 18);
     return true;
   }
   // BLK
@@ -335,6 +328,7 @@ bool parseCommand(const char* s, Command& cmd) {
     cmd.h = hexByte(s + 10);
     cmd.s = hexByte(s + 12);
     cmd.v = hexByte(s + 14);
+    cmd.show = decodeShow(s + 16);
     return true;
   }
   // WIT
@@ -394,8 +388,8 @@ Target decodeTarget(const char* s) {
 
 Dir decodeDir(const char* s) {
   // s punta subito dopo il target, es. "UP003000" o "DW003000"
-  if (!strncmp(s, "UP", 2)) return DIR_UP;
-  if (!strncmp(s, "DW", 2)) return DIR_DW;
+  if (!strncmp(s, DIRSTRINGS[DIR_UP], 2)) return DIR_UP;
+  if (!strncmp(s, DIRSTRINGS[DIR_DW], 2)) return DIR_DW;
 
   // Default in caso di errore
   Serial.print("Unknown direction: "); Serial.println(s);
@@ -403,41 +397,14 @@ Dir decodeDir(const char* s) {
 }
 
 
+Show decodeShow(const char* s) {
+  if (!strncmp(s, SHOWSTRINGS[SHOW_Y], 2)) return SHOW_Y;
+  if (!strncmp(s, SHOWSTRINGS[SHOW_N], 2)) return SHOW_N;
 
-
-// void handleSetZone(const char* cmd) {
-//   uint8_t idx = (cmd[4] - '0') * 10 + (cmd[5] - '0');
-//   if (idx < 1 || idx > 10) return;
-
-//   uint16_t first = atoi(cmd + 6);
-//   uint16_t last  = atoi(cmd + 9);
-
-//   if (first >= NUM_LEDS || last >= NUM_LEDS || first > last) return;
-
-//   customZones[idx - 1].first = first;
-//   customZones[idx - 1].last  = last;
-//   customZoneDefined[idx - 1] = true;
-// }
-
-
-
-// void handleGetZone(const char* cmd) {
-//   uint8_t idx = (cmd[4] - '0') * 10 + (cmd[5] - '0');
-//   if (idx < 1 || idx > 10) return;
-
-//   Serial.print("ZONE C");
-//   Serial.print(idx);
-//   Serial.print(":");
-
-//   if (!customZoneDefined[idx - 1]) {
-//     Serial.println("UNDEF");
-//     return;
-//   }
-
-//   Serial.print(customZones[idx - 1].first);
-//   Serial.print("-");
-//   Serial.println(customZones[idx - 1].last);
-// }
+  // Default in caso di errore
+  Serial.print("Unknown show command: "); Serial.println(s);
+  return SHOW_X;
+}
 
 
 
@@ -540,3 +507,38 @@ void softwareReset() {
 }
 
 
+
+
+// void handleSetZone(const char* cmd) {
+//   uint8_t idx = (cmd[4] - '0') * 10 + (cmd[5] - '0');
+//   if (idx < 1 || idx > 10) return;
+
+//   uint16_t first = atoi(cmd + 6);
+//   uint16_t last  = atoi(cmd + 9);
+
+//   if (first >= NUM_LEDS || last >= NUM_LEDS || first > last) return;
+
+//   customZones[idx - 1].first = first;
+//   customZones[idx - 1].last  = last;
+//   customZoneDefined[idx - 1] = true;
+// }
+
+
+
+// void handleGetZone(const char* cmd) {
+//   uint8_t idx = (cmd[4] - '0') * 10 + (cmd[5] - '0');
+//   if (idx < 1 || idx > 10) return;
+
+//   Serial.print("ZONE C");
+//   Serial.print(idx);
+//   Serial.print(":");
+
+//   if (!customZoneDefined[idx - 1]) {
+//     Serial.println("UNDEF");
+//     return;
+//   }
+
+//   Serial.print(customZones[idx - 1].first);
+//   Serial.print("-");
+//   Serial.println(customZones[idx - 1].last);
+// }

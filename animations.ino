@@ -3,11 +3,6 @@
 void animationManager() {
   if (runQueue) executeQueue();
 
-  //Executes blink when the timer set the flags
-  if(blink.active) {
-      FastLED.show();
-  }
-
   //End of the queue
   if (commandsIndex == commandsCount) {
     commandsCount = 0; 
@@ -34,20 +29,17 @@ void executeQueue() {
 
 
 void executeCommand(Command cmd) {
-  Serial.print("Executing: ");
-  Serial.println(CMDSTRINGS[cmd.type]);
-
+  Serial.print(CMDSTRINGS[cmd.type]);
+  Serial.print(" ");
+  Serial.println(commandsIndex);
 
   // Stop infinite anumatio 
-  if(cmd.type != CMD_ANM) {
-      animActive = false;
-      tickAnim = false;
-  }
+  //if(cmd.type != CMD_ANM || cmd.type != CMD_WIT ) {stopCurrentAnim();}
 
   switch(cmd.type) {
     case CMD_FIX:
       // esempio: color fill
-      fillZone(cmd.target, cmd.h, cmd.s, cmd.v);
+      fillZone(cmd.target, cmd.h, cmd.s, cmd.v, cmd.show);
       break;
     case CMD_DIM:
       // esempio: fade
@@ -57,10 +49,10 @@ void executeCommand(Command cmd) {
       blinkZone(cmd.target, cmd.ms_on, cmd.ms_off);
       break;
     case CMD_SHD:
-      shadeZone(cmd.target, cmd.h, cmd.s, cmd.v, cmd.h2, cmd.s2, cmd.v2);
+      shadeZone(cmd.target, cmd.h, cmd.s, cmd.v, cmd.h2, cmd.s2, cmd.v2, cmd.show);
       break;
     case CMD_ANM:
-      runAnim(cmd.target, cmd.anim_number, cmd.anim_speed, cmd.h, cmd.s, cmd.v);
+      runAnim(cmd.target, cmd.anim_number, cmd.anim_speed, cmd.h, cmd.s, cmd.v, cmd.show);
       break;
     case CMD_WIT:
       waitSeconds(cmd.sec);
@@ -76,8 +68,7 @@ void executeCommand(Command cmd) {
 
 
 
-
-void fillZone(Target t, uint8_t h, uint8_t s, uint8_t v) {
+void fillZone(Target t, uint8_t h, uint8_t s, uint8_t v, Show sh) {
   uint16_t first, last;
   if (!getTargetRange(t, first, last)) return;
 
@@ -87,15 +78,35 @@ void fillZone(Target t, uint8_t h, uint8_t s, uint8_t v) {
     leds[i] = color;
   }
 
-  FastLED.show();
+  if(sh == SHOW_Y) FastLED.show();
 }
 
 
 
-void shadeZone(Target t,
-  uint8_t h1, uint8_t s1, uint8_t v1,
-  uint8_t h2, uint8_t s2, uint8_t v2
-) {
+void dimZone(Target t, Dir d, uint16_t ms) {
+  uint16_t first, last;
+  if (!getTargetRange(t, first, last)) return;
+
+  // backup stato corrente
+  for (uint16_t i = first; i <= last; i++) {
+    animBackup[i] = leds[i];
+  }
+
+  if (ms < 10) ms = 10;
+  dim.first = first;
+  dim.last = last;
+  dim.duration = ms / 20;
+  if (dim.duration == 0) dim.duration = 1;
+  dim.counter = 0;
+  dim.up = (d == DIR_UP);
+  dim.active = true;
+  waitForTimer = true;
+  animActive = false;
+}
+
+
+
+void shadeZone(Target t, uint8_t h1, uint8_t s1, uint8_t v1, uint8_t h2, uint8_t s2, uint8_t v2, Show sh) {
   uint16_t first, last;
   if (!getTargetRange(t, first, last)) return;
 
@@ -114,7 +125,7 @@ void shadeZone(Target t,
     leds[first + i] = blend(c1, c2, amount);
   }
 
-  FastLED.show();
+  if(sh == SHOW_Y) FastLED.show();
 }
 
 
@@ -122,6 +133,7 @@ void shadeZone(Target t,
 void waitSeconds(uint16_t sec){ 
   waitSecondsCounter = sec;
   waitForTimer = true;
+  witActive = true;
 }
 
 
@@ -130,20 +142,19 @@ void blinkZone(Target t, uint16_t ms_on, uint16_t ms_off) {
   uint16_t first, last;
   if (!getTargetRange(t, first, last)) return;
 
-
   //led strip backup
   for (uint16_t i = first; i <= last; i++) {
     animBackup[i] = leds[i];
   }
 
+  //init
   waitForTimer = true;
-
   blink.first   = first;
   blink.last    = last;
-  blink.msOn    = ms_on / 10;
-  blink.msOff   = ms_off / 10;
+  blink.msOn    = ms_on; // 20;
+  blink.msOff   = ms_off; // 20;
   blink.stateOn = true;
-  blink.stateOff= true;
+  blink.stateOff= false;
   blink.active  = true;
 
 }
@@ -159,7 +170,7 @@ void repeatLast(uint16_t repeat){
 
 
 
-void runAnim(Target t, uint8_t num, uint8_t sp, uint8_t h, uint8_t s, uint8_t v){ 
+void runAnim(Target t, uint8_t num, uint8_t sp, uint8_t h, uint8_t s, uint8_t v, Show sh){ 
   uint16_t first, last;
   if (!getTargetRange(t, first, last)) return;
   
@@ -170,16 +181,34 @@ void runAnim(Target t, uint8_t num, uint8_t sp, uint8_t h, uint8_t s, uint8_t v)
   currentAnim.s = s;
   currentAnim.v = v;
   currentAnim.speed = sp;
+  currentAnim.show = sh;
 
  switch(num) {
     case 0:
       break;
 
-    case 20:  // HYPERSPACE
+    case 20:   // ALTERNATE COLOR
+      //led strip backup
+      for (uint16_t i = first; i <= last; i++) {
+        animBackup[i] = leds[i];
+      }
+
+      //init
+      waitForTimer      = true;
+      alternate.msA     = sp * 5;
+      alternate.msB     = sp * 5;
+      alternate.stateA  = true;
+      alternate.stateB  = false;
+      alternate.active  = true;
+      animActive        = false; //not infinite animation
+      break;
+
+
+    case 21:  // HYPERSPACE
       if (!animActive) {
         // Salva il background iniziale
         for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
-          animBackup[i] = leds[i];  // ← usato come background
+          animBackup[i] = leds[i];  //  usato come background
           leds[i] = CHSV(currentAnim.h, currentAnim.s, currentAnim.v);
         }
         for (uint8_t i = 0; i < MAX_STARS; i++) {
@@ -190,19 +219,6 @@ void runAnim(Target t, uint8_t num, uint8_t sp, uint8_t h, uint8_t s, uint8_t v)
       break;
 
 
-    case 21:   // ALTERNATE COLOR
-      // snapshot prev color
-      for (uint16_t i = first; i <= last; i++) {
-        animBackup[i] = leds[i];
-      }
-      animStep    = 0; 
-      animCounter = 0;
-      animPeriod = sp;
-
-      waitForTimer = true; 
-      animActive = true;
-      break;
-
     default:
       Serial.println("The animation does't exist");
       break;
@@ -211,145 +227,151 @@ void runAnim(Target t, uint8_t num, uint8_t sp, uint8_t h, uint8_t s, uint8_t v)
 }
 
 
-void showAnimation() {
+void showAnimation() {  //chiamata nel loop
 
-  if (!tickAnim) return;
-  tickAnim = false;
-  if (!animActive) return;
+    if (!tickAnim) return;  // Aggiorna solo quando il timer lo permette (ogni 20 ms)
+    tickAnim = false;
 
-  // ---------- DIM ANIMATION - ONCE ----------
-  if (dim.active) {
-    dim.counter++;
 
-    uint8_t amount;
-    if (dim.counter >= dim.duration) {
-      amount = dim.up ? 255 : 0;
-      dim.active = false;
-      waitForTimer = false; 
-    } else {
-      amount = (dim.counter * 255UL) / dim.duration;
-      if (!dim.up) amount = 255 - amount;
+    // ---------- DIM ANIMATION - ONCE ----------
+    if (dim.active) {
+        dim.counter++;
+
+        uint8_t scale;
+        if (dim.counter >= dim.duration) { //3 sec = 150
+            //reset
+            scale = dim.up ? 255 : 0;
+            dim.active = false;
+            animActive = false;
+            tickAnim = false;
+            waitForTimer = false;
+        } else {
+            //Execute dim
+            scale = (dim.counter * 255UL) / dim.duration; //duration 0-65535 / 20 -> 0 - 3276 
+            if (!dim.up) scale = 255 - scale;
+        }
+
+        for (uint16_t i = dim.first; i <= dim.last; i++) {
+            leds[i] = animBackup[i];
+            leds[i].nscale8(scale);
+        }
+        FastLED.show();
     }
 
-    for (uint16_t i = dim.first; i <= dim.last; i++) {
-      leds[i] = animBackup[i];
-      leds[i].nscale8_video(amount);
+
+    // ---------- BLK ANIMATION - ONCE ----------
+    if (blink.active) {
+
+      if (blink.stateOn) {
+        for (uint16_t i = blink.first; i <= blink.last; i++) {
+          leds[i] = animBackup[i];
+        }
+        FastLED.show();
+      }
+
+      if (blink.stateOff) {
+        for (uint16_t i = blink.first; i <= blink.last; i++) {
+          leds[i] = CRGB::Black;
+        }
+        FastLED.show();
+        //backup for the next repetition
+        for (uint16_t i = blink.first; i <= blink.last; i++) {
+          leds[i] = animBackup[i];
+        }
+      }
+    }
+
+
+    // ---------- ANM 20 : ALTERNATE - ONCE ----------
+    if (alternate.active) {
+
+      if (alternate.stateA) {
+        CHSV color(currentAnim.h, currentAnim.s, currentAnim.v);
+        for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
+          leds[i] = color;
+        }
+      }
+
+      if (alternate.stateB) {
+        for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
+          leds[i] = animBackup[i];
+        }
+      }
+
+      FastLED.show();
+    }
+
+
+
+    // ---------- INFINITE ANIMATIONS ----------
+    if (!animActive) return;
+
+
+    // ---------- ANM 21 : STARS (infinite) ----------
+    if (currentAnim.number == 21) {
+        updateStars();   // Aggiorna la posizione delle stelle
     }
 
     FastLED.show();
-    return;
-  }
 
-  // ---------- ANM 20 : STARS (infinite) ----------
-  if (currentAnim.number == 20) {
-    static uint8_t starTickCounter = 0;
-    starTickCounter++;
-    if (starTickCounter >= currentAnim.speed) { // aggiorna frame solo quando raggiunge speed
-      starTickCounter = 0;
-      updateStars();
-      FastLED.show();
-    }
-    return;
-  }
-
-  // ---------- ANM 21 : ALTERNATE - ONCE ----------
-  if (currentAnim.number == 21) {
-    static uint16_t altCounter = 0;
-    altCounter++;
-    if (altCounter < currentAnim.speed) return;
-    altCounter = 0;
-
-    if (animStep == 0) {
-      // A to B
-      CHSV c(currentAnim.h, currentAnim.s, currentAnim.v);
-      for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
-        leds[i] = c;
-      }
-      FastLED.show();
-      animStep = 1;
-      return;
-    }
-
-    if (animStep == 1) {
-      // B to A
-      for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
-        leds[i] = animBackup[i];
-      }
-      FastLED.show();
-      animStep = 2;
-      return;
-    }
-
-    // Fine animazione
-    animActive = false;
-    waitForTimer = false; 
-    animStep = 0;
-  }
 }
 
 
 void updateStars() {
+    // Reset LED al background
+    for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
+        leds[i] = animBackup[i];
+    }
 
-  // reset dei LED attivi al background salvato
-  for (uint16_t i = currentAnim.first; i <= currentAnim.last; i++) {
-    leds[i] = animBackup[i];
-  }
+    // Spawn nuove stelle casuali
+    if (random8() < 100) { // più alto -> più stelle
+        for (uint8_t i = 0; i < MAX_STARS; i++) {
+            if (!stars[i].active) {
+                stars[i].active = true;
 
-  // spawn nuove stelle
-  if (random8() < 30) { //Più grande è il numero, più stelle appaiono
+                //divido tra destra e sinistra
+                if(random(0,2))
+                {
+                  stars[i].pos =  random(currentAnim.first, currentAnim.last / 2); 
+                } else {
+                  stars[i].pos =  random(currentAnim.last / 2, currentAnim.last);
+                }
+
+                // Velocità variabile in base a currentAnim.speed
+                stars[i].speed = (random8(5, 10) * currentAnim.speed) / 100 + 1;  //più alto -> più veloce
+
+                stars[i].bright = 10;  // luminosità iniziale
+                break;
+            }
+        }
+    }
+
+    // Aggiorna tutte le stelle attive
     for (uint8_t i = 0; i < MAX_STARS; i++) {
-      if (!stars[i].active) {
-        stars[i].active = true;
-        stars[i].pos = currentAnim.first;
-        stars[i].speed = random8(5,20);
-        stars[i].bright = 30;         // luminosità iniziale
-        break;
-      }
+        if (!stars[i].active) continue;
+
+        stars[i].pos += stars[i].speed;
+        stars[i].bright = qadd8(stars[i].bright, 20); // aumenta luminosità
+
+        if (stars[i].pos > currentAnim.last) {  
+            stars[i].active = false;
+            continue;
+        }
+
+        // Overlay sul LED attuale
+        leds[stars[i].pos] += CHSV(0, 0, stars[i].bright);
     }
-  }
+}
 
-  // update stars
-  for (uint8_t i = 0; i < MAX_STARS; i++) {
-    if (!stars[i].active) continue;
 
-    stars[i].pos += stars[i].speed;
-    stars[i].bright = qadd8(stars[i].bright, 20);
 
-    if (stars[i].pos > currentAnim.last) {
+void stopCurrentAnim() {
+    animActive = false;
+    tickAnim = false;
+    for (uint8_t i = 0; i < MAX_STARS; i++) 
       stars[i].active = false;
-      continue;
-    }
-
-    // overlay stars sul LED attuale
-    leds[stars[i].pos] += CHSV(0, 0, stars[i].bright);
-  }
+    //FastLED.show();
 }
-
-
-
-
-
-void dimZone(Target t, Dir d, uint16_t ms) {
-  uint16_t first, last;
-  if (!getTargetRange(t, first, last)) return;
-
-  // backup stato corrente
-  for (uint16_t i = first; i <= last; i++) {
-    animBackup[i] = leds[i];
-  }
-
-  if (dim.duration < 10) dim.duration = 10;
-
-dim.first = first;
-dim.last = last;
-dim.duration = ms / 10;
-dim.counter = 0;
-dim.up = (d == DIR_UP);
-dim.active = true;
-
-waitForTimer = true;
-}
-
 
 
 

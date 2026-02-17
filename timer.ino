@@ -3,6 +3,54 @@
 void callback() {
   //***************************************************************************
   //Code here for events every 1ms
+  every1msCounter++;
+  if (every1msCounter >= 25) {
+    every1msCounter = 0;
+    tickAnim = true; //anum update
+  }
+
+
+    //BLK 
+    if(blink.active) {
+      if(blink.msOn == 0) {
+        blink.stateOn = false;
+        blink.stateOff = true;
+
+        if(blink.msOff == 0) {
+          blink.stateOff = false;
+          blink.active = false;
+          waitForTimer = false;
+        } else {
+          //Off fase
+          blink.msOff--;
+        }
+
+      } else {
+        blink.msOn--; 
+        //On fase
+      }
+    }
+
+    //ALTERNATE
+    if(alternate.active) {
+      if(alternate.msA == 0) {
+        alternate.stateA = false;
+        alternate.stateB = true;
+
+        if(alternate.msB == 0) {
+          alternate.stateB = false;
+          alternate.active = false;
+          waitForTimer = false;
+        } else {
+          //Off fase
+          alternate.msB--;
+        }
+
+      } else {
+        alternate.msA--; 
+        //On fase
+      }
+    }
 
 
   //***************************************************************************
@@ -10,36 +58,13 @@ void callback() {
     every10msCounter = 0;
     //Code here for events every 10ms
 
-    tickAnim = true;   //anum update
   
     animTickCounter++;
     if (animTickCounter >= currentAnim.speed) {
       animTickCounter = 0;
     }
 
-    //BLK 
-    if(blink.active) {
-      
-      if(blink.msOn == 0) {
-        blink.stateOn = false;
-        //Time off: it turn off the selected zone
-        for (uint16_t i = blink.first; i <= blink.last; i++) {leds[i] = CRGB::Black;}
 
-        if(blink.msOff == 0) {
-          blink.stateOff = false;
-          //When the time off it's over it show the previews backuped configuration
-          for (uint16_t i = blink.first; i <= blink.last; i++) {leds[i] = animBackup[i];}
-          blink.active = false;  //Timer unloked, the queue can go on 
-          waitForTimer = false;
-        } else {
-          blink.msOff--;
-        }
-
-      } else {
-        blink.msOn--;
-        //Time on: it doesn nothing because it shows the previws color
-      }
-    }
 
 
     //***************************************************************************
@@ -56,13 +81,17 @@ void callback() {
         //Code here for events every 1 second
 
         //WIT timer
-        if(waitForTimer) {
-          if (waitSecondsCounter == 0) {
-            waitForTimer = false;  //Timer unloked
-          } else {
-            waitSecondsCounter--;
+        if(witActive) {
+          if(waitForTimer) {
+            if (waitSecondsCounter == 0) {
+              waitForTimer = false;  //Timer unloked
+              witActive = false;
+            } else {
+              waitSecondsCounter--;
+            }
           }
         }
+
         
 
       
